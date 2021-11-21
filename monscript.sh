@@ -12,11 +12,10 @@ NET_ALL_INTERNE="192.168.0.0/16"
 IFACE_INTERNET="ens4"
 IP_FW_INTERNET="192.168.1.1"
 
+# Variables Windows Server
+IFACE_VLAN_SERVER="ens6.30"
+IP_FW_VLAN_SERVER="192.168.30.1"
 
-IFACE_PDT="ens6"
-IFACE_VLAN_PDT_ADMIN="ens6.30"
-IP_FW_VLAN_PDT_ADMIN="192.168.30.1"
-NET_PDT_ADMIN="192.168.30.0/24"
 # Nous vidons toutes les chaines
 iptables -F
 
@@ -33,42 +32,38 @@ $IPTABLES -t nat -F
 $IPTABLES -t nat -X
 
 $IPTABLES -t nat -P PREROUTING ACCEPT
-$IPTABLES-t nat -P POSTROUTING ACCEPT
+$IPTABLES -t nat -P POSTROUTING ACCEPT
 $IPTABLES -t nat -P OUTPUT ACCEPT
 
 # Translation d'adresse pour tout ce qui sort vers l'internet
-$IPTABLES -t nat -A POSTROUTING -o ens4 -j MASQUERADE
+$IPTABLES -t nat -A POSTROUTING -o IFACE_INTERNET -j MASQUERADE
+#
+$IPTABLES -A FORWARD -m state --state ESTABLISHED -j ACCEPT
 
 # La machine locale est sure
-$IPTABLES -A INPUT  -i lo -j ACCEPT
-$IPTABLES -A OUTPUT -o lo -j ACCEPT
+$IPTABLES -A INPUT  -i IFACE_LO -j ACCEPT
+$IPTABLES -A OUTPUT -o IFACE_LO -j ACCEPT
 
 # Resolution DNS pour le firewall
-$IPTABLES -A INPUT  -i ens4 --protocol udp --source-port 53 -j ACCEPT
-$IPTABLES-A OUTPUT -o ens4 --protocol udp --destination-port 53 -j ACCEPT
-$IPTABLES-A INPUT  -i ens4 --protocol tcp --source-port 53 -j ACCEPT
-$IPTABLES-A OUTPUT -o ens4 --protocol tcp --destination-port 53 -j ACCEPT 
+$IPTABLES -A INPUT  -i IFACE_INTERNET -p UDP --source-port 53 -j ACCEPT
+$IPTABLES -A OUTPUT -o IFACE_INTERNET -p UDP --destination-port 53 -j ACCEPT
+$IPTABLES -A INPUT  -i IFACE_INTERNET -p TCP --source-port 53 -j ACCEPT
+$IPTABLES -A OUTPUT -o IFACE_INTERNET -p TCP --destination-port 53 -j ACCEPT 
 
 # Resolution DNS pour les machines du LAN
-$IPTABLES -A FORWARD -i ens4 -o ens6.30 --protocol udp --source-port 53 -j ACCEPT
-$IPTABLES -A FORWARD -i ens6.30 -o ens4 --protocol udp --destination-port 53 -j ACCEPT
-$IPTABLES -A FORWARD -i ens4 -o ens6.30 --protocol tcp --source-port 53 -j ACCEPT
-$IPTABLES -A FORWARD -i ens6.30 -o ens4 --protocol tcp --destination-port 53 -j ACCEPT 
+$IPTABLES -A FORWARD -i IFACE_INTERNET -o IFACE_VLAN_SERVER -p UDP --source-port 53 -j ACCEPT
+$IPTABLES -A FORWARD -i IFACE_VLAN_SERVER -o IFACE_INTERNET -p UDP --destination-port 53 -j ACCEPT
+$IPTABLES -A FORWARD -i IFACE_INTERNET -o IFACE_VLAN_SERVER -p TCP --source-port 53 -j ACCEPT
+$IPTABLES -A FORWARD -i IFACE_VLAN_SERVER -o IFACE_INTERNET -p TCP --destination-port 53 -j ACCEPT 
 
 # connexions Firewall-Internet (www)
-$IPTABLES -A OUTPUT -p tcp --dport 80  -o ens4 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-$IPTABLES -A OUTPUT -p tcp --dport 443 -o ens4 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-$IPTABLES -A INPUT  -p tcp --sport 80  -i ens4 -m state --state ESTABLISHED,RELATED -j ACCEPT
-$IPTABLES -A INPUT  -p tcp --sport 443 -i ens4 -m state --state ESTABLISHED,RELATED -j ACCEPT
+$IPTABLES -A OUTPUT -o IFACE_INTERNET -p TCP -m multiport --dport 80,443 -j ACCEPT
+$IPTABLES -A INPUT -i IFACE_INTERNET -p TCP -m multiport --sport 80,443 -j ACCEPT
 
-# connexions LAN-Internet (www)
-#$IPTABLES -A FORWARD -p tcp --dport 80  -i ens6.30 -o ens4 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-#$IPTABLES -A FORWARD -p tcp --dport 443 -i ens6.30 -o ens4 -m state --state NEW,ESTABLISHED,RELATED -j ACCEPT
-#$IPTABLES -A FORWARD -p tcp --sport 80  -i ens4 -o ens6.30 -m state --state ESTABLISHED,RELATED -j ACCEPT
-#$IPTABLES -A FORWARD -p tcp --sport 443 -i ens4 -o ens6.30 -m state --state ESTABLISHED,RELATED -j ACCEPT
 
-$IPTABLES -A FORWARD -p tcp --dport 80,443  -i ens6.30 -o ens4 -m multiport -j ACCEPT
-$IPTABLES -A FORWARD -p tcp --dport 80,443  -i ens4 -o ens6.30 -m multiport -j ACCEPT
+#Connexion LAN - Internet
+$IPTABLES -A FORWARD -i IFACE_VLAN_SERVER -o IFACE_INTERNET -p tcp -m multiport --dport 80,443 -j ACCEPT
+$IPTABLES -A FORWARD -i IFACE_INTERNET -o IFACE_VLAN_SERVER -p tcp -m multiport --dport 80,443 -j ACCEPT
 
 
 # Fin du fichier
